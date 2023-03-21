@@ -50,19 +50,18 @@ class UserManagement:
                                         telegram_chat_id INTEGER,
                                         creation_date TEXT NOT NULL
                                     );"""
-        self._run_sql(sql, None, False)
+        self._run_sql(sql)
 
     def create_user(self, user):
         sql = '''INSERT INTO users(user_id, username, first_name, last_name, role, telegram_chat_id, creation_date)
                  VALUES(?,?,?,?,?,?,?)'''
-        self._run_sql(sql, (
+        self._run_sql(sql, data=(
             user.user_id, user.username, user.first_name, user.last_name, user.role, user.telegram_chat_id,
             user.creation_date.isoformat()))
 
     def read_user(self, user_id):
         sql = "SELECT * FROM users WHERE user_id=?"
-
-        row = self._run_sql(sql, (user_id,), False, "one")
+        row = self._run_sql(sql, data=(user_id,), fetch="one")
         if row:
             return User(*row)
         return None
@@ -76,32 +75,35 @@ class UserManagement:
                      telegram_chat_id = ? ,
                      creation_date = ?
                  WHERE user_id = ?'''
-        self._run_sql(sql, (user.username, user.first_name, user.last_name, user.role, user.telegram_chat_id,
-                            user.creation_date.isoformat(), user.user_id))
+        self._run_sql(sql, data=(user.username, user.first_name, user.last_name, user.role, user.telegram_chat_id,
+                                 user.creation_date.isoformat(), user.user_id))
 
     def delete_user(self, user_id):
         sql = 'DELETE FROM users WHERE user_id=?'
-        self._run_sql(sql, (user_id,))
+        self._run_sql(sql, data=(user_id,))
 
-    def _run_sql(self, sql, data=None, commit=True, fetch=None):
+    def get_all_users(self):
+        sql = "SELECT * FROM users"
+        return [User(*row) for row in self._run_sql(sql, fetch="all")]
+
+    def get_all_admins(self):
+        sql = "SELECT * FROM users WHERE role='admin'"
+        return [User(*row) for row in self._run_sql(sql, fetch="all")]
+
+    def _run_sql(self, sql, data=None, fetch=None):
         if self.conn is not None:
             try:
-                cur = self.conn.cursor()
-                if data is not None:
-                    with self.conn.cursor() as c:
-                        c.execute(sql, data)
-                else:
-                    with self.conn.cursor() as c:
-                        c.execute(sql)
+                with self.conn:
+                    cur = self.conn.cursor()
+                    if data is not None:
+                        cur.execute(sql, data)
+                    else:
+                        cur.execute(sql)
 
-                if fetch is "one":
-                    return cur.fetchone()
-                elif fetch is "many":
-                    return cur.fetchmany()  # todo
-
-                if commit:
-                    self.conn.commit()
-
+                    if fetch == "one":
+                        return cur.fetchone()
+                    elif fetch == "all":
+                        return cur.fetchall()
             except Error as e:
                 logging.exception(e)
                 raise DatabaseException("Error while running the database operation")
